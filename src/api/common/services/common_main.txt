@@ -1,0 +1,109 @@
+from api.common.services.gpt_utils import call_api
+from src.sql_utils import *
+from api.common.services.biz_tagger import *
+from src.domain.entities import *
+import json, glob
+
+
+def upload_topic_and_sections(subject_id):
+    subject = [t for t in select_table(Subject) if t.subject_id==subject_id]
+    for topic in subject:
+        create_record(Topic(topic_version=1,
+                            topic_name=topic.subject_name,
+                            subject_id=subject_id))
+        for temario in glob.glob(f"resources/{topic.subject_name}/*.docx"):
+            sections = extract_subtopics(temario)
+            for section in sections:
+                create_record(Section(topic_id=subject_id,
+                                      section_name=section,
+                                      content=sections[section]))
+
+def upload_questions(xlsx_path='preguntas_0.xlsx'):
+    import pandas as pd
+    qts = pd.read_excel(f'docs/{xlsx_path}')
+    topic_table = select_table(Topic)
+    for row in range(len(qts)):
+        topic_id = [i for i in topic_table if qts.loc[row,'topic'].split('_')[0] in i.topic_name]
+        record = Question(topic_id=topic_id[0].topic_id, question_type='Teorica', wording=qts.loc[row,'question'],
+                          option_a=qts.loc[row,'correct_answer'], option_b=qts.loc[row,'incorrect_answer_1'],
+                          option_c=qts.loc[row,'incorrect_answer_2'], option_d=qts.loc[row,'incorrect_answer_3'],
+                          correct_option='option_a', reasoning=qts.loc[row,'rationale_correct_answer'],
+                          is_validated=False, is_exam_ready=False, is_from_old_exam=False)
+        create_record(my_record=record)
+
+def generate_tags(topic_id):
+    prompt, params, examples = load_sys_prompt("src/prompts/tag_text.json")
+    sections = [s for s in select_table(Section) if s.topic_id==topic_id]
+    for section in sections:
+        blacklist_tags = [s.tag_name for s in select_table(Tag)]
+        tags = json.loads(call_api(system_msg=prompt.replace('{}', f'{blacklist_tags}'), 
+                                    user_msg=section.content, 
+                                    temperature= params["temperature"], 
+                                    max_tokens=params["maxResponseLength"], 
+                                    top_p=params["topProbablities"], 
+                                    examples=examples, json=True,
+                                    eng=params["deploymentName"]))['tags']
+        for tag in tags:
+            create_record(Tag(tag_name=tag['Tag name'], tag_description=tag['Tag description'], tag_type=None))
+            create_record(Section_tag(section_id=section.section_id, tag_id=select_table(Tag)[-1].tag_id))
+            
+def generate_questions(topic_id):
+    prompt, params, examples = load_sys_prompt("src/prompts/tag_question.json")
+    section_table = select_table(Section); section_tag_table = select_table(Section_tag)
+    question_table = select_table(Question); tag_table = select_table(Tag)
+    for question in question_table:
+        tags, tag_ids = [], []
+        section_ids = [s.section_id for s in section_table if s.topic_id==question.topic_id]
+        for section_id in section_ids:
+            tag_ids += [tag.tag_id for tag in section_tag_table if tag.section_id == section_id]
+        for tag_id in tag_ids:
+            tag_value = [tag for tag in tag_table if tag.tag_id == tag_id]
+            tags.append(tag_value[0].tag_name)
+        tag_result = json.loads(call_api(system_msg=prompt,
+                                        user_msg=str({'question':f'{question}', 'tags':f'{tags}'}),
+                                        temperature=params["temperature"], 
+                                        max_tokens=params["maxResponseLength"], 
+                                        top_p=params["topProbablities"], 
+                                        examples=examples, json=True,
+                                        eng=params["deploymentName"]))['tags']
+        for tag in tag_result:
+            output_id = [t.tag_id for t in tag_table if t.tag_name == tag['Tag name']]
+            create_record(Question_Tag(question_id=question.question_id, tag_id=output_id[0]))
+    
+def delete_duplicates_tags():
+    tag_table = select_table(Tag)
+    section_tag_table = select_table(Section_tag)
+    for tag in tag_table:
+        tag_duplicates = [t for t in tag_table if t.tag_name == tag.tag_name]
+        if len(tag_duplicates)>1:
+            for tag_duplicate in tag_duplicates[1:]:
+                section_duplicate = [s for s in section_tag_table if s.tag_id==tag_duplicate.tag_id]
+                delete_record(section_duplicate[0])
+                delete_record(tag_duplicate)
+
+
+
+from langchain_community.document_loaders import UnstructuredPDFLoader
+from langchain_community.document_loaders import UnstructuredWordDocumentLoader
+from unidecode import unidecode
+import re, tiktoken, json
+
+
+def num_tokens_from_string(string: str) -> int:
+    encoding = tiktoken.get_encoding('cl100k_base')
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+def extract_subtopics(docx_path):
+    subtopics = {}
+    if docx_path.endswith(".pdf"): loader = UnstructuredPDFLoader(docx_path, mode="elements")
+    else: loader = UnstructuredWordDocumentLoader(docx_path, mode="elements")
+    for el in loader.load():
+        if 'page_number' in el.metadata:
+            if el.metadata['page_number'] not in [1,2,3] and el.page_content != 'Ideas clave':
+                if re.match(r'(\d+\.\d+\.\s.*)', el.page_content):
+                    last_topic = unidecode(el.page_content)
+                    subtopics[last_topic] = ""
+                if unidecode(el.page_content) != last_topic: 
+                    subtopics[last_topic] += unidecode(el.page_content) + "\n"
+    return subtopics
