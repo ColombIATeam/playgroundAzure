@@ -1,0 +1,27 @@
+.gradio-container {
+    background-color :  #f5fcfc }
+    img {
+  max-width: 100%;
+  height: auto;
+  display: flex;
+}
+
+img {
+  max-width: auto;
+  height: auto;
+  
+  margin-left: auto;
+  margin-right: auto;
+}
+
+button {
+  background: #0894c4;
+  color: ghostwhite;
+  transition-duration: 0.4s;
+}
+/* y 
+button:hover {
+  background-color: #f5fcfc; 
+  color: #0b7294;
+  box-shadow: 0 12px 16px 0 rgba(0,0,0,0.24), 0 17px 50px 0 rgba(0,0,0,0.19);
+}*/

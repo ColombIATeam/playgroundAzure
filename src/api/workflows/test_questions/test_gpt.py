@@ -1,74 +1,65 @@
-from api.common.services.openai_api import OpenAIAPI
-from openai import AzureOpenAI
-import json, logging, os
-
-
-class GptTest:
-    _gpt_utils: OpenAIAPI
-    _openai_client: AzureOpenAI
-
-    def __init__(self, client: AzureOpenAI) -> None:
-        self._gpt_utils = OpenAIAPI()
-        self._openai_client = client
-
-    def get_text_test(self, content:str, input_prompt:str, msg=[]):
-        logging.info(
-            f"get_test_gpt input question={content}, prompt={input_prompt}"
+import json  
+import logging  
+import os  
+from langchain_openai import ChatOpenAI
+  
+class GptTest:   
+  
+    def __init__(self) -> None:  
+        self.model = ChatOpenAI(
+            model="gpt-4-turbo",
+            temperature=0.95,
+            max_tokens=1024,
+            timeout=None,
+            max_retries=2,
         )
+  
+    async def get_text_test(self, content: str, input_prompt: str, attempt=0):  
+        if attempt > 4:  
+            print("El prompt no genera el formato esperado en get_text_test")  
+            return  
         
-        prompt, params, _ = self._gpt_utils.load_sys_prompt(
-            os.path.join(
-                os.sep.join(__file__.split(os.sep)[:-1]),
-                "prompts",
-                "generate_test.json",
-            )
-        )
+        logging.info(f"get_text_test input question={content}, prompt={input_prompt}")  
         
-        last_msg: list[dict[str, str]] = []
-        for i in msg[-4:]:
-            last_msg.append({"role": "user", "content": i["Alumno"]})
-            last_msg.append({"role": "assistant", "content": i["Profesor"]})
+        if len(input_prompt) <= 5:
+            prompt_path = os.path.join(  
+                os.sep.join(__file__.split(os.sep)[:-1]),  
+                "prompts",  
+                "generate_test.json",  
+            )  
+            
+            with open(prompt_path, 'r') as file:  
+                prompt_data = json.load(file)  
+                prompt_text = prompt_data.get("systemPrompt")  
+                input_prompt = prompt_text  
         
-        if len(input_prompt)<=5:
-            input_prompt = prompt
-        output = self._gpt_utils.call_api(
-            system_msg=input_prompt,
-            user_msg=content,
-            params=params,
-            examples=last_msg,
-            is_json=True,
-            client=self._openai_client,
-        )
+        message = [("system", input_prompt), ("human", content)]  
         
-        json_answer = json.loads(str(output))
+        try:  
+            response = await self.model.ainvoke(message)  # Assuming self.model.invoke is an asynchronous function  
+            result = response.content.replace("```", "").replace("json", "", 1)  
         
-        return json_answer
+            return json.loads(result)  
+        except Exception as e:  
+            print(e)  
+            return await self.get_text_test(content=content, input_prompt=input_prompt, attempt=attempt + 1)  
+
+  
+    async def get_question_eval(self, prompt_improving: list):  
+        logging.info(f"get_question_eval input prompt={prompt_improving}")  
     
-    def get_question_eval(self, prompt_improving:list, msg=[]):
-        logging.info(
-            f"get_answer_correct_gpt input prompt={prompt_improving}"
-        )
-        
-        prompt, params, _ = self._gpt_utils.load_sys_prompt(
-            os.path.join(
-                os.sep.join(__file__.split(os.sep)[:-1]),
-                "prompts",
-                "generate_test_eval.json",
-            )
-        )
-        
-        last_msg: list[dict[str, str]] = []
-        for i in msg[-4:]:
-            last_msg.append({"role": "user", "content": i["Alumno"]})
-            last_msg.append({"role": "assistant", "content": i["Profesor"]})
-        
-        output = self._gpt_utils.call_api(
-            system_msg=prompt,
-            user_msg=prompt_improving,
-            params=params,
-            examples=last_msg,
-            is_json=False,
-            client=self._openai_client,
-        )
-        answer = str(output)
-        return answer
+        prompt_path = os.path.join(  
+            os.sep.join(__file__.split(os.sep)[:-1]),  
+            "prompts",  
+            "generate_test_eval.json",  
+        )  
+    
+        with open(prompt_path, 'r') as file:  
+            prompt_data = json.load(file)  
+            prompt = prompt_data.get("systemPrompt")  
+    
+        message = [("system", prompt), ("human", prompt_improving)]  
+    
+        response = await self.model.ainvoke(message)  # Assuming self.model.invoke is an asynchronous function  
+        return response.content  
+
