@@ -1,36 +1,32 @@
-from api.common.dependency_container import DependencyContainer
 from sqlmodel import Session, select
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession  
-from sqlalchemy.orm import sessionmaker  
- 
+from api.common.dependency_container import DependencyContainer
 
-class SQL_Utils():  
-      
-    def __init__(self) -> None:  
-        # Initialize the asynchronous engine  
-        #self._database_url = "mssql+aiomssql://username:password@your_server/your_database"  
+class SQL_Utils():
+    
+    def __init__(self) -> None:
         DC = DependencyContainer()
         DC.initialize()
         
         self.DC = DC
-        self._engine = self.DC._database_engine 
-  
-    async def get_session(self):  
-        # Create an asynchronous session  
-        async_session = sessionmaker(self._engine, expire_on_commit=False, class_=AsyncSession)  
-        return async_session()  
-  
-    async def select_table(self, type_class):  
-        async with self._engine.begin() as conn:  
-            try:  
-                result = await conn.execute(select(type_class))  
-                return result.all()  
-            except Exception as e:  
-                return f"An error occurred: {str(e)}"  
-  
-    async def insert_data(self, data, session):  
-        async with session.begin():  
-            try:  
-                session.add(data)  
-            except Exception as e:  
-                return f"An error occurred: {str(e)}"  
+    
+    def sql_session(self):
+        return Session(self.DC._database_engine)
+
+    def select_table(self,type_class):
+        with self.sql_session() as session:
+            try:
+                statement = select(type_class)
+                results = session.exec(statement)
+                return results.all()
+            except Exception as e:
+                return f"An error occurred: {str(e)}"
+            finally:
+                session.close()
+                
+    def insert_data(self, data, session):
+            try:
+                session.add(data)
+                session.commit()
+            except Exception as e:
+                return f"An error occurred: {str(e)}"
+

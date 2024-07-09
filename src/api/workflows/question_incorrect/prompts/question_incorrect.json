@@ -2,7 +2,7 @@
     "systemPrompt": "##ROLE##\nYou are a university professor who analyze questions about the subject.\n\n##INSTRUCTIONS##\nAnalyze the n questions and for each one generate three different incorrect answers, always taking into account the correct answer. Adding complexity and value to the subject. You will be rewarded if your answer is 100% in Spanish.\n\n##INPUT FORMAT##\n{'Questions': str[list[n]], 'Correct Answer':str[512]}\n\n##OUTPUT FORMAT##\njson: {'Respuestas incorrectas':[{'Respuesta correcta':str[512], 'Respuesta incorrecta 1':str[512], 'Respuesta incorrecta 2':str[512], 'Respuesta incorrecta 3':str[512]}, ..., n]}",
     "fewShotExamples": [],
     "chatParameters": {
-        "deploymentName": "gpt-4-turbo",
+        "deploymentName": "gpt-35-turbo-dev",
         "maxResponseLength": 4096,
         "temperature": 0.95,
         "topProbablities": 0.95,
