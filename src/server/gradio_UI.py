@@ -1,11 +1,6 @@
 import gradio as gr
 import os
 
-def load_css():
-    with open('src/server/style.css', 'r') as file:
-        css_content = file.read()
-    return css_content
-
 class UI():
     
     def __init__(self, work_flow_utils, linked_events) -> None:
@@ -13,10 +8,7 @@ class UI():
         self.work_flow_utils = work_flow_utils
         self.linked_events = linked_events
         
-        self.global_vars = gr.State({'content': "", 'subject_id': None,
-                                     'questions':{'prompts': "", 'result': [], 'eval': "", 'switch': True},
-                                     'correct_answers':{'prompts': "", 'result': [], 'eval': "", 'switch': True},
-                                     'incorrect_answers':{'prompts': "", 'result': [], 'eval': "", 'switch': True}})
+        self.subjects_dropped_list = [x.subject_name for x in self.work_flow_utils.subjects_table]
 
         ### Cargar prompts ###
 
@@ -27,10 +19,9 @@ class UI():
             fn=self.work_flow_utils.gen_preguntas,
             inputs=[
                     self.preguntas_prompt_box,
-                    self.global_vars
                     ],
             
-            outputs=[gr.Markdown(value="",label="Preguntas generadas"),gr.Textbox(label="Prompt tips", interactive=False),self.global_vars],
+            outputs=[gr.JSON(value="{}",label="Preguntas generadas"),gr.Markdown(label="LLM tips")],
             
             allow_flagging="never",submit_btn="Generar",clear_btn="Limpiar",stop_btn=gr.Button("Interrumpir", variant="stop", visible=True))
 
@@ -42,10 +33,9 @@ class UI():
             fn=self.work_flow_utils.gen_correctas,
             inputs=[
                     self.correctas_prompt_box,
-                    self.global_vars
                 ],
                 
-                outputs=[gr.Markdown(value="",label="Respuestas correctas"),gr.Textbox(label="Prompt tips", interactive=False), self.global_vars],
+                outputs=[gr.JSON(value="{}",label="Respuestas correctas"),gr.Markdown(label="LLM tips")],
                 
                 allow_flagging="never",submit_btn="Generar",clear_btn="Limpiar",stop_btn=gr.Button("Interrumpir", variant="stop", visible=True))
 
@@ -56,50 +46,46 @@ class UI():
             fn=self.work_flow_utils.gen_incorrectas,
             inputs=[
                     self.incorrectas_prompt_box,
-                    self.global_vars
                     ],
             
-            outputs=[gr.Markdown(value="",label="Respuestas incorrectas"),gr.Textbox(label="Prompt tips", interactive=False), self.global_vars],
+            outputs=[gr.JSON(value="{}",label="Respuestas incorrectas"),gr.Markdown(label="LLM tips")],
             
             allow_flagging="never",submit_btn="Generar",clear_btn="Limpiar",stop_btn=gr.Button("Interrumpir", variant="stop", visible=True))
 
         ### Guardar prompts ### 
         
-        self.save_preguntas_message = gr.Textbox()
+        self.save_preguntas_message = gr.Markdown()
         self.save_preguntas_button = gr.Button("Guardar",interactive=True,)
         self.guardar_preguntas_UI = gr.Interface(
             fn=self.linked_events.save_preguntas_prompt,
             inputs=[
                     gr.Textbox(lines=1, label="Nombre del prompt", interactive=True, ),
                     gr.Textbox(lines=1, label="Descripción del prompt", interactive=True, ),
-                    self.global_vars
                     ],
             
-            outputs=[self.save_preguntas_message, self.global_vars],allow_flagging="never",
+            outputs=self.save_preguntas_message,allow_flagging="never",
                             submit_btn=self.save_preguntas_button,clear_btn="Limpiar")
 
-        self.save_correctas_message = gr.Textbox()
+        self.save_correctas_message = gr.Markdown()
         self.guardar_correctas_UI = gr.Interface(
             fn=self.linked_events.save_correctas_prompt,
             inputs=[
                     gr.Textbox(lines=1, label="Nombre del prompt", interactive=True, ),
                     gr.Textbox(lines=1, label="Descripción del prompt", interactive=True, ),
-                    self.global_vars
                     ],
             
-            outputs=[self.save_correctas_message, self.global_vars],allow_flagging="never",
+            outputs=self.save_correctas_message,allow_flagging="never",
                             submit_btn="Guardar",clear_btn="Limpiar")
 
-        self.save_incorrectas_message = gr.Textbox()
+        self.save_incorrectas_message = gr.Markdown()
         self.guardar_incorrectas_UI = gr.Interface(
             fn=self.linked_events.save_incorrectas_prompt,
             inputs=[
                     gr.Textbox(lines=1, label="Nombre del prompt", interactive=True, ),
                     gr.Textbox(lines=1, label="Descripción del prompt", interactive=True, ),
-                    self.global_vars
                     ],
             
-            outputs=[self.save_incorrectas_message, self.global_vars] ,allow_flagging="never",
+            outputs=self.save_incorrectas_message ,allow_flagging="never",
                             submit_btn="Guardar",clear_btn="Limpiar")
         
         self.image = gr.Image(os.path.join(os.sep.join(__file__.split(os.sep)[:-1]),"Diagrama.png",))
@@ -127,14 +113,9 @@ class UI():
             clear_btn=gr.Button("",visible=False, interactive=False),
             
         )
-        
-    
 
     def run_UI(self):
-        with gr.Blocks(theme=gr.themes.Soft(),css=load_css()) as demo:
-            
-            
-            
+        with gr.Blocks(theme=gr.themes.Soft()) as demo:
             gr.Markdown("# Generador de preguntas de opción múltiple",)
             
             with gr.Row():
@@ -142,7 +123,7 @@ class UI():
                     gr.TabbedInterface([self.diagrama, self.manual_UI], ["Uso", "Buenas practicas"])
                 with gr.Column():
                     
-                    drop_subject = gr.Dropdown([], label="Asignatura", interactive=True,)
+                    drop_subject = gr.Dropdown(self.subjects_dropped_list, label="Asignatura", interactive=True,)
                     drop_topic = gr.Dropdown(["seleccione una Asignatura"], label="Temario", interactive=True,)
                     summary = gr.Textbox(lines=30, label="Resumen del Temario (por secciones)", interactive=True,)
                     
@@ -156,7 +137,7 @@ class UI():
                 
                 drop_subject.change(fn=self.linked_events.upload_drop_preguntas_prompt, inputs=[drop_subject], outputs=[drop_preguntas_prompts])
                 drop_preguntas_prompts.change(fn=self.linked_events.load_prompt, inputs=[drop_preguntas_prompts], outputs=[self.preguntas_prompt_box])
-                Evaluation_switch_preguntas.change(fn=self.work_flow_utils.eval_update_preguntas, inputs=[Evaluation_switch_preguntas,self.global_vars], outputs=[self.global_vars])
+                Evaluation_switch_preguntas .change(fn=self.work_flow_utils.eval_update_preguntas, inputs=[Evaluation_switch_preguntas ])
                 
             
             with gr.Blocks():
@@ -168,7 +149,7 @@ class UI():
                 
                 drop_subject.change(fn=self.linked_events.upload_drop_correctas_prompt, inputs=[drop_subject], outputs=[drop_correctas_prompts])
                 drop_correctas_prompts.change(fn=self.linked_events.load_prompt, inputs=[drop_correctas_prompts], outputs=[self.correctas_prompt_box])
-                Evaluation_switch_correctas.change(fn=self.work_flow_utils.eval_update_correctas, inputs=[Evaluation_switch_correctas,self.global_vars], outputs=[self.global_vars])
+                Evaluation_switch_correctas .change(fn=self.work_flow_utils.eval_update_correctas, inputs=[Evaluation_switch_correctas ])
                 
             with gr.Blocks():
                 gr.Markdown("---\n# Generar respuestas incorrectas\n Al generar las opciones incorrectas un resultado óptimo se caracteriza por la creación de respuestas que deliberadamente se desvían de la exactitud, pero lo hacen de manera coherente y metódica. A pesar de que las respuestas no son correctas, estas mantienen claridad y evitan ambigüedades.")
@@ -178,7 +159,7 @@ class UI():
                 
                 drop_subject.change(fn=self.linked_events.upload_drop_incorrectas_prompt, inputs=[drop_subject], outputs=[drop_incorrectas_prompts])
                 drop_incorrectas_prompts.change(fn=self.linked_events.load_prompt, inputs=[drop_incorrectas_prompts], outputs=[self.incorrectas_prompt_box])
-                Evaluation_switch_incorrectas.change(fn=self.work_flow_utils.eval_update_incorrectas, inputs=[Evaluation_switch_incorrectas,self.global_vars], outputs=[self.global_vars])
+                Evaluation_switch_correctas .change(fn=self.work_flow_utils.eval_update_incorrectas, inputs=[Evaluation_switch_incorrectas])
             
             """with gr.Blocks():
                 gr.Markdown("---\n# Guardar/Exportar resultados en excel\nAsegurate de tener preguntas generadas del ultimo prompt editado")
@@ -190,15 +171,22 @@ class UI():
                         export_results = gr.Button("Exportar resultados guardados")
                 importing_message = gr.Markdown("# * ")"""
             
-            drop_subject.change(fn=self.linked_events.subject_change, inputs=[drop_subject, self.global_vars], outputs=[drop_topic, self.global_vars])
-            drop_topic.change(fn=self.linked_events.topic_change, inputs=[drop_topic, self.global_vars], outputs=[summary, self.global_vars])
+            drop_subject.change(fn=self.linked_events.subject_change, inputs=[drop_subject], outputs=[drop_topic])
+            drop_topic.change(fn=self.linked_events.topic_change, inputs=[drop_topic], outputs=[summary])
             
-            self.save_preguntas_message.change(fn=self.linked_events.refresh_drop_preguntas, inputs=[self.global_vars], outputs=[drop_preguntas_prompts])
-            self.save_correctas_message.change(fn=self.linked_events.refresh_drop_correctas, inputs=[self.global_vars], outputs=[drop_correctas_prompts])
-            self.save_incorrectas_message.change(fn=self.linked_events.refresh_drop_incorrectas, inputs=[self.global_vars], outputs=[drop_incorrectas_prompts])
+            summary.change(fn=self.linked_events.summary_change, inputs=[summary])
             
-            #results_check_point.click(fn=self.work_flow_utils.save_record, inputs=[self.global_vars], outputs=[importing_message])
+            self.preguntas_prompt_box.change(fn=self.linked_events.init_preguntas_prompt, inputs=[self.preguntas_prompt_box])
+            self.correctas_prompt_box.change(fn=self.linked_events.init_correctas_prompt, inputs=[self.correctas_prompt_box])
+            self.incorrectas_prompt_box.change(fn=self.linked_events.init_incorrectas_prompt, inputs=[self.incorrectas_prompt_box])
+            
+            self.save_preguntas_message.change(fn=self.linked_events.refresh_drop_preguntas, outputs=[drop_preguntas_prompts])
+            self.save_correctas_message.change(fn=self.linked_events.refresh_drop_correctas, outputs=[drop_correctas_prompts])
+            self.save_incorrectas_message.change(fn=self.linked_events.refresh_drop_incorrectas, outputs=[drop_incorrectas_prompts])
+            
+            #results_check_point.click(fn=self.work_flow_utils.save_record, outputs=[importing_message])
             #export_results.click(fn=self.work_flow_utils.export_table, inputs=[file_name], outputs=[importing_message])
-            demo.load(fn=self.work_flow_utils.init_subject_drop, outputs=[drop_subject])
+            
             
         return demo
+        #demo.launch()
