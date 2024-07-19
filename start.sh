@@ -1,2 +1,4 @@
 #!/bin/bash
-python src/main.py
+
+cr src
+uvicorn gradio_app:app --reload
