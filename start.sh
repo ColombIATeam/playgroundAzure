@@ -1,4 +1,4 @@
 #!/bin/bash
 
-cr src
+cd src
 uvicorn gradio_app:app --reload
